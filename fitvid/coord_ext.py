@@ -2,10 +2,10 @@ import os
 import tensorflow as tf
 
 import time
-from object_detection.utils import label_map_util
-from object_detection.utils import visualization_utils as viz_utils
-from object_detection.utils import config_util
-from object_detection.builders import model_builder
+from utils import label_map_util
+from utils import visualization_utils as viz_utils
+from utils import config_util
+from .builders import model_builder
 
 import numpy as np
 from PIL import Image
