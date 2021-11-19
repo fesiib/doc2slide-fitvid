@@ -1,4 +1,6 @@
 import os
+import sys
+from six import print_
 import tensorflow as tf
 
 import time
@@ -18,22 +20,8 @@ PATH_TO_CFG = PATH_TO_MODEL_DIR + "/centernet_hourglass104_512x512_coco17_tpu-8_
 PATH_TO_CKPT = PATH_TO_MODEL_DIR + "/"  
 PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/fitvid/document_label_map.pbtxt"
 
-print('Loading model... ', end='')
-start_time = time.time()
-
-# Load pipeline config and build a detection model
-configs = config_util.get_configs_from_pipeline_file(PATH_TO_CFG)
-model_config = configs['model']
-detection_model = model_builder.build(model_config=model_config, is_training=False)
-
-# Restore checkpoint
-ckpt = tf.compat.v2.train.Checkpoint(model=detection_model)
-ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-141')).expect_partial()
-
-
-
 @tf.function
-def detect_fn(image):
+def detect_fn(detection_model, image):
     """Detect objects in image."""
     image, shapes = detection_model.preprocess(image)
     prediction_dict = detection_model.predict(image, shapes)
@@ -43,110 +31,126 @@ def detect_fn(image):
 
 def load_image_into_numpy_array(path):
     return np.array(Image.open(path))
-              
-category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
-#image_path = "/hdd/jykim_archive/huge_OD/temp_move/ver123/video5_2_9_shot5.jpg"
-image_path = "/home/fesiib/doc2slide/dataset_doc2ppt/103/0.jpg"
-image_np = load_image_into_numpy_array(image_path)
-
-# display the original image
-ori_image = cv2.imread(image_path)
-img_height, img_width, _ = ori_image.shape
-#cv2.imshow("ori_image",ori_image)
-#cv2.waitKey(0)
-#cv2.destroyAllWindows()
 
 
-# Things to try:
-# Flip horizontally
-#image_np = np.fliplr(image_np).copy()
-# Convert image to grayscale
-#image_np = np.tile(np.mean(image_np, 2, keepdims=True), (1, 1, 3)).astype(np.uint8)
-input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
-detections = detect_fn(input_tensor)
+def print_boxes(detections, image_np):
+    boxes = detections['detection_boxes']
+    width, height = image_np.shape[:2]
 
-num_detections = int(detections.pop('num_detections'))
-detections = {key: value[0, :num_detections].numpy()
+    box = np.squeeze(boxes)
+    scores = detections['detection_scores']
 
-        
-        
-for key, value in detections.items()}
+    classes_pred = detections['detection_classes']
 
-#print(num_detections)
+    min_score_thresh = 0.30
 
-detections['num_detections'] = num_detections
+    bboxes = boxes[scores > min_score_thresh]
+    scores_new = scores[scores > min_score_thresh]
+    classes_pred_new = classes_pred[scores > min_score_thresh]
+
+    width, height = image_np.shape[:2]
+
+    print('The boudning box details are organized as follow: \n')
+    print('[ymin   xmin   ymax   xmax   confidence    class-label] \n')
+    i = 0 
+    for box in bboxes:
+        ymin, xmin, ymax, xmax = box
+        final_box = [int(ymin * width), int(xmin * height), int(ymax * width), int(xmax *height) , round(scores_new[i] * 100) , classes_pred_new[i] + 1 ]
+        i += 1
+        print(final_box)
+
+def write_image(root_path, image_name, image):
+    if (os.path.exists(root_path) is False):
+        os.makedirs(root_path, 0o777, exist_ok=True)
+    path = os.path.join(root_path, image_name)
+    print(path)
+    cv2.imwrite(path, image)
+
+def main(args):
+
+    print('Loading model... ', args)
+
+    # Load pipeline config and build a detection model
+    configs = config_util.get_configs_from_pipeline_file(PATH_TO_CFG)
+    model_config = configs['model']
+    detection_model = model_builder.build(model_config=model_config, is_training=False)
+
+    # Restore checkpoint
+    ckpt = tf.compat.v2.train.Checkpoint(model=detection_model)
+    ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-141')).expect_partial()
+
+                
+    category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
+    
+    image_root_path = "/home/fesiib/doc2slide/dataset_doc2ppt"
+    image_slide_path = "103"
+    image_parent_path = os.path.join(image_root_path, image_slide_path)
+    for root, dirs, files in os.walk(image_parent_path):
+        for image_name in files:
+            if image_name.endswith('.jpg') is False:
+                continue
+            print(image_name)
+            image_path = os.path.join(image_parent_path, image_name)
+            image_np = load_image_into_numpy_array(image_path)
+            
+            # ori_image = cv2.imread(image_path)
+            # cv2.imshow("ori_image", ori_image)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+
+            # Things to try:
+            # Flip horizontally
+            #image_np = np.fliplr(image_np).copy()
+            # Convert image to grayscale
+            #image_np = np.tile(np.mean(image_np, 2, keepdims=True), (1, 1, 3)).astype(np.uint8)
+            input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
+            detections = detect_fn(detection_model, input_tensor)
+
+            num_detections = int(detections.pop('num_detections'))
+            detections = {key: value[0, :num_detections].numpy()
+
+                    
+                    
+            for key, value in detections.items()}
+
+            #print(num_detections)
+
+            detections['num_detections'] = num_detections
+            
+            print_boxes(detections, image_np)
+
+            # for i in range(len(boxes)):
+                    
+            #     ymin = int((box[i,0]*height))
+            #     xmin = int((box[i,1]*width))
+            #     ymax = int((box[i,2]*height))
+            #     xmax = int((box[i,3]*width))
+
+            #     print(xmin, xmax, ymin , ymax)
+
+            # Result = np.array(img_np[ymin:ymax,xmin:xmax])
 
 
-boxes = detections['detection_boxes']
-width, height = image_np.shape[:2]
+            #print("Detections:", detections)
+                        # detection_classes should be ints.
+            detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
 
-box = np.squeeze(boxes)
-scores = detections['detection_scores']
+            # print("Detections_2:", detections['detection_boxes'])
 
-classes_pred = detections['detection_classes']
+            label_id_offset = 1
+            image_np_with_detections = image_np.copy()
 
-min_score_thresh = 0.30
-
-bboxes = boxes[scores > min_score_thresh]
-scores_new = scores[scores > min_score_thresh]
-classes_pred_new = classes_pred[scores > min_score_thresh]
-
-width, height = image_np.shape[:2]
-final_box = []
-print('\n')
-
-print('The boudning box details are organized as follow: \n')
-print('[ymin   xmin   ymax   xmax   confidence    class-label] \n')
-i = 0 
-for box in bboxes:
-    ymin, xmin, ymax, xmax = box
-    final_box = [int(ymin * width), int(xmin * height), int(ymax * width), int(xmax *height) , round(scores_new[i] * 100) , classes_pred_new[i] + 1 ]
-    i += 1
-    print(final_box)
-
-# for i in range(len(boxes)):
-        
-#     ymin = int((box[i,0]*height))
-#     xmin = int((box[i,1]*width))
-#     ymax = int((box[i,2]*height))
-#     xmax = int((box[i,3]*width))
-
-#     print(xmin, xmax, ymin , ymax)
-
-# Result = np.array(img_np[ymin:ymax,xmin:xmax])
-
-
-#print("Detections:", detections)
-            # detection_classes should be ints.
-detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
-
-# print("Detections_2:", detections['detection_boxes'])
-
-label_id_offset = 1
-image_np_with_detections = image_np.copy()
-
-viz_utils.visualize_boxes_and_labels_on_image_array(image_np_with_detections, detections['detection_boxes'],
-                                            detections['detection_classes']+label_id_offset,
-                                                        detections['detection_scores'],
-                                                                    category_index,
-                                                                                use_normalized_coordinates=True,
-                                                                                            max_boxes_to_draw=200,
-                                                                                                        min_score_thresh=.30,
-                                                                                                                    agnostic_mode=False)
-
-#plt.figure()
-#plt.imshow(image_np_with_detections)
-print('Done')
-#plt.show()
-
-#image_np_with_detections.show()
-#cv2.imshow("image",image_np_with_detections)
-#cv2.waitKey(0)
-#cv2.destroyAllWindows()
-
-#@tf.function
-#def detect_fn(image):
-#        """Detect objects in image."""
-
-#            image, shapes = detection_model.preprocess(image)
+            viz_utils.visualize_boxes_and_labels_on_image_array(image_np_with_detections, detections['detection_boxes'],
+                                                        detections['detection_classes']+label_id_offset,
+                                                                    detections['detection_scores'],
+                                                                                category_index,
+                                                                                            use_normalized_coordinates=True,
+                                                                                                        max_boxes_to_draw=200,
+                                                                                                                    min_score_thresh=.30,
+                                                                                                                                agnostic_mode=False)
+            result_path = os.path.join(os.getcwd(), 'results')
+            write_image(os.path.join(result_path, image_slide_path), image_name, image_np_with_detections)
+    
+if __name__ == "__main__":
+    main(sys.argv[1:])
 
