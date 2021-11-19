@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "/home/fesiib/.conda/envs/object-detection/bin/python",
+  "-m",
+  "ipykernel_launcher",
+  "-f",
+  "{connection_file}"
+ ],
+ "display_name": "object-detection",
+ "language": "python",
+ "metadata": {
+  "debugger": true
+ }
+}
