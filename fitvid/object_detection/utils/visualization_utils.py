@@ -197,7 +197,7 @@ def draw_bounding_box_on_image(image,
       coordinates as absolute.
   """
   print("Printing Coordinates")
-  print(xmin, ymin, xman, ymax)
+  print(xmin, ymin, xmax, ymax)
 
   draw = ImageDraw.Draw(image)
   im_width, im_height = image.size

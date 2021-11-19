@@ -5,7 +5,7 @@ import time
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as viz_utils
 from object_detection.utils import config_util
-from .builders import model_builder
+from object_detection.builders import model_builder
 
 import numpy as np
 from PIL import Image
@@ -13,10 +13,10 @@ import matplotlib.pyplot as plt
 import warnings
 import cv2
 
-PATH_TO_MODEL_DIR = "/home/jykim/models/research/object_detection/models/models_for_centernet_finetuning"
+PATH_TO_MODEL_DIR = "/home/fesiib/doc2slide/models/fitvid"
 PATH_TO_CFG = PATH_TO_MODEL_DIR + "/centernet_hourglass104_512x512_coco17_tpu-8_document_for_sharing_finetuning.config"
 PATH_TO_CKPT = PATH_TO_MODEL_DIR + "/"  
-PATH_TO_LABELS = "/home/jykim/models/research/object_detection/document_label_map.pbtxt"
+PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/fitvid/document_label_map.pbtxt"
 
 print('Loading model... ', end='')
 start_time = time.time()
@@ -28,7 +28,7 @@ detection_model = model_builder.build(model_config=model_config, is_training=Fal
 
 # Restore checkpoint
 ckpt = tf.compat.v2.train.Checkpoint(model=detection_model)
-ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-136')).expect_partial()
+ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-141')).expect_partial()
 
 
 
@@ -46,15 +46,15 @@ def load_image_into_numpy_array(path):
               
 category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
 #image_path = "/hdd/jykim_archive/huge_OD/temp_move/ver123/video5_2_9_shot5.jpg"
-image_path = "/home/jykim/models/research/object_detection/ppt_prof_kang_4_1/0008.jpg"
+image_path = "/home/fesiib/doc2slide/dataset_doc2ppt/103/0.jpg"
 image_np = load_image_into_numpy_array(image_path)
 
 # display the original image
 ori_image = cv2.imread(image_path)
 img_height, img_width, _ = ori_image.shape
-cv2.imshow("ori_image",ori_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+#cv2.imshow("ori_image",ori_image)
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()
 
 
 # Things to try:
@@ -140,9 +140,9 @@ print('Done')
 #plt.show()
 
 #image_np_with_detections.show()
-cv2.imshow("image",image_np_with_detections)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+#cv2.imshow("image",image_np_with_detections)
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()
 
 #@tf.function
 #def detect_fn(image):
