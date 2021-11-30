@@ -79,77 +79,80 @@ def main(args):
     ckpt = tf.compat.v2.train.Checkpoint(model=detection_model)
     ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-141')).expect_partial()
 
-                
+    print(model_config)
+    return 
     category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
     
     image_root_path = "/home/fesiib/doc2slide/dataset_doc2ppt"
-    image_slide_path = "103"
-    image_parent_path = os.path.join(image_root_path, image_slide_path)
-    for root, dirs, files in os.walk(image_parent_path):
-        for image_name in files:
-            if image_name.endswith('.jpg') is False:
-                continue
-            print(image_name)
-            image_path = os.path.join(image_parent_path, image_name)
-            image_np = load_image_into_numpy_array(image_path)
-            
-            # ori_image = cv2.imread(image_path)
-            # cv2.imshow("ori_image", ori_image)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
-
-            # Things to try:
-            # Flip horizontally
-            #image_np = np.fliplr(image_np).copy()
-            # Convert image to grayscale
-            #image_np = np.tile(np.mean(image_np, 2, keepdims=True), (1, 1, 3)).astype(np.uint8)
-            input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
-            detections = detect_fn(detection_model, input_tensor)
-
-            num_detections = int(detections.pop('num_detections'))
-            detections = {key: value[0, :num_detections].numpy()
-
+    for _, dirs, _ in os.walk(image_root_path):
+        for image_folder_path in dirs:
+            image_parent_path = os.path.join(image_root_path, image_folder_path)
+            print (image_parent_path)
+            for _, _, files in os.walk(image_parent_path):
+                for image_name in files:
+                    if image_name.endswith('.jpg') is False:
+                        continue
+                    print(image_name)
+                    image_path = os.path.join(image_parent_path, image_name)
+                    image_np = load_image_into_numpy_array(image_path)
                     
+                    # ori_image = cv2.imread(image_path)
+                    # cv2.imshow("ori_image", ori_image)
+                    # cv2.waitKey(0)
+                    # cv2.destroyAllWindows()
+
+                    # Things to try:
+                    # Flip horizontally
+                    #image_np = np.fliplr(image_np).copy()
+                    # Convert image to grayscale
+                    #image_np = np.tile(np.mean(image_np, 2, keepdims=True), (1, 1, 3)).astype(np.uint8)
+                    input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
+                    detections = detect_fn(detection_model, input_tensor)
+
+                    num_detections = int(detections.pop('num_detections'))
+                    detections = {key: value[0, :num_detections].numpy()
+
+                            
+                            
+                    for key, value in detections.items()}
+
+                    #print(num_detections)
+
+                    detections['num_detections'] = num_detections
                     
-            for key, value in detections.items()}
+                    print_boxes(detections, image_np)
 
-            #print(num_detections)
+                    # for i in range(len(boxes)):
+                            
+                    #     ymin = int((box[i,0]*height))
+                    #     xmin = int((box[i,1]*width))
+                    #     ymax = int((box[i,2]*height))
+                    #     xmax = int((box[i,3]*width))
 
-            detections['num_detections'] = num_detections
-            
-            print_boxes(detections, image_np)
+                    #     print(xmin, xmax, ymin , ymax)
 
-            # for i in range(len(boxes)):
-                    
-            #     ymin = int((box[i,0]*height))
-            #     xmin = int((box[i,1]*width))
-            #     ymax = int((box[i,2]*height))
-            #     xmax = int((box[i,3]*width))
-
-            #     print(xmin, xmax, ymin , ymax)
-
-            # Result = np.array(img_np[ymin:ymax,xmin:xmax])
+                    # Result = np.array(img_np[ymin:ymax,xmin:xmax])
 
 
-            #print("Detections:", detections)
-                        # detection_classes should be ints.
-            detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
+                    #print("Detections:", detections)
+                                # detection_classes should be ints.
+                    detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
 
-            # print("Detections_2:", detections['detection_boxes'])
+                    # print("Detections_2:", detections['detection_boxes'])
 
-            label_id_offset = 1
-            image_np_with_detections = image_np.copy()
+                    label_id_offset = 1
+                    image_np_with_detections = image_np.copy()
 
-            viz_utils.visualize_boxes_and_labels_on_image_array(image_np_with_detections, detections['detection_boxes'],
-                                                        detections['detection_classes']+label_id_offset,
-                                                                    detections['detection_scores'],
-                                                                                category_index,
-                                                                                            use_normalized_coordinates=True,
-                                                                                                        max_boxes_to_draw=200,
-                                                                                                                    min_score_thresh=.30,
-                                                                                                                                agnostic_mode=False)
-            result_path = os.path.join(os.getcwd(), 'results')
-            write_image(os.path.join(result_path, image_slide_path), image_name, image_np_with_detections)
+                    viz_utils.visualize_boxes_and_labels_on_image_array(image_np_with_detections, detections['detection_boxes'],
+                                                                detections['detection_classes']+label_id_offset,
+                                                                            detections['detection_scores'],
+                                                                                        category_index,
+                                                                                                    use_normalized_coordinates=True,
+                                                                                                                max_boxes_to_draw=200,
+                                                                                                                            min_score_thresh=.30,
+                                                                                                                                        agnostic_mode=False)
+                    result_path = os.path.join(os.getcwd(), 'results')
+                    write_image(os.path.join(result_path, image_folder_path), image_name, image_np_with_detections)
     
 if __name__ == "__main__":
     main(sys.argv[1:])
