@@ -14,11 +14,27 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import warnings
 import cv2
+import csv
 
 PATH_TO_MODEL_DIR = "/home/fesiib/doc2slide/models/fitvid"
 PATH_TO_CFG = PATH_TO_MODEL_DIR + "/centernet_hourglass104_512x512_coco17_tpu-8_document_for_sharing_finetuning.config"
 PATH_TO_CKPT = PATH_TO_MODEL_DIR + "/"  
 PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/fitvid/document_label_map.pbtxt"
+
+CLASS_LABELS = [
+    'title',
+    'header',
+    'text box',
+    'footer',
+    'picture',
+    'instructor',
+    'diagram',
+    'table',
+    'figure',
+    'handwriting',
+    'chart',
+    'schematic diagram',
+]
 
 @tf.function
 def detect_fn(detection_model, image):
@@ -35,7 +51,7 @@ def load_image_into_numpy_array(path):
 
 def print_boxes(detections, image_np):
     boxes = detections['detection_boxes']
-    width, height = image_np.shape[:2]
+    height, width = image_np.shape[:2]
 
     box = np.squeeze(boxes)
     scores = detections['detection_scores']
@@ -48,22 +64,51 @@ def print_boxes(detections, image_np):
     scores_new = scores[scores > min_score_thresh]
     classes_pred_new = classes_pred[scores > min_score_thresh]
 
-    width, height = image_np.shape[:2]
-
     print('The boudning box details are organized as follow: \n')
     print('[ymin   xmin   ymax   xmax   confidence    class-label] \n')
     i = 0 
     for box in bboxes:
         ymin, xmin, ymax, xmax = box
-        final_box = [int(ymin * width), int(xmin * height), int(ymax * width), int(xmax *height) , round(scores_new[i] * 100) , classes_pred_new[i] + 1 ]
+        final_box = [int(ymin * height), int(xmin * width), int(ymax * height), int(xmax *width) , round(scores_new[i] * 100) , classes_pred_new[i] + 1 ]
         i += 1
         print(final_box)
+
+def get_data_entries(detections, image_np, slide_id, slide_deck_id):
+    entries = []
+    
+    boxes = detections['detection_boxes']
+    height, width = image_np.shape[:2]
+
+    box = np.squeeze(boxes)
+    scores = detections['detection_scores']
+    classes_pred = detections['detection_classes']
+
+    min_score_thresh = 0.40
+
+    bboxes = boxes[scores > min_score_thresh]
+    scores_new = scores[scores > min_score_thresh]
+    classes_pred_new = classes_pred[scores > min_score_thresh]
+    for i, box in enumerate(bboxes):
+        ymin, xmin, ymax, xmax = box
+        entry = {
+            "Slide Deck Id": slide_deck_id,
+            "Slide Id": slide_id,
+            "Image Height": height,
+            "Image Width": width,
+            "Type": CLASS_LABELS[classes_pred_new[i]],
+            'X': int(xmin * width),
+            'Y': int(ymin * height),
+            'BB Width': int((xmax-xmin) * width),
+            'BB Height': int((ymax-ymin) * height),
+        }
+        entries.append(entry)
+    return entries
 
 def write_image(root_path, image_name, image):
     if (os.path.exists(root_path) is False):
         os.makedirs(root_path, 0o777, exist_ok=True)
     path = os.path.join(root_path, image_name)
-    print(path)
+    #print(path)
     cv2.imwrite(path, image)
 
 def main(args):
@@ -79,23 +124,25 @@ def main(args):
     ckpt = tf.compat.v2.train.Checkpoint(model=detection_model)
     ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-141')).expect_partial()
 
-    print(model_config)
-    return 
     category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
     
     image_root_path = "/home/fesiib/doc2slide/dataset_doc2ppt"
+    all_dataset = []
+
+    total = 0
     for _, dirs, _ in os.walk(image_root_path):
         for image_folder_path in dirs:
             image_parent_path = os.path.join(image_root_path, image_folder_path)
-            print (image_parent_path)
+            if (total > 3):
+                break
+            total += 1
             for _, _, files in os.walk(image_parent_path):
                 for image_name in files:
                     if image_name.endswith('.jpg') is False:
                         continue
-                    print(image_name)
                     image_path = os.path.join(image_parent_path, image_name)
                     image_np = load_image_into_numpy_array(image_path)
-                    
+                    print(image_path)
                     # ori_image = cv2.imread(image_path)
                     # cv2.imshow("ori_image", ori_image)
                     # cv2.waitKey(0)
@@ -120,7 +167,10 @@ def main(args):
 
                     detections['num_detections'] = num_detections
                     
-                    print_boxes(detections, image_np)
+                    cur_entries = get_data_entries(detections, image_np, image_name.split('.')[0], image_folder_path)
+                    all_dataset.extend(cur_entries)
+
+                    #print_boxes(detections, image_np)
 
                     # for i in range(len(boxes)):
                             
@@ -151,9 +201,17 @@ def main(args):
                                                                                                                 max_boxes_to_draw=200,
                                                                                                                             min_score_thresh=.30,
                                                                                                                                         agnostic_mode=False)
-                    result_path = os.path.join(os.getcwd(), 'results')
-                    write_image(os.path.join(result_path, image_folder_path), image_name, image_np_with_detections)
-    
+                    #result_path = os.path.join(os.getcwd(), 'results')
+                    #write_image(os.path.join(result_path, image_folder_path), image_name, image_np_with_detections)
+    if len(all_dataset) > 0:
+        csv_entries = []
+        csv_entries.append(all_dataset[0].keys())
+        for entry in all_dataset:
+            csv_entries.append(entry.values())
+        csv_file_path = os.path.join(os.getcwd(), 'results/slide_deck_dataset.csv')
+        with open(csv_file_path, 'w') as file:
+            writer = csv.writer(file)
+            writer.writerows(csv_entries)
 if __name__ == "__main__":
     main(sys.argv[1:])
 
