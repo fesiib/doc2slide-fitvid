@@ -1,5 +1,6 @@
 import os
 import sys
+from google.protobuf.text_format import Error
 from six import print_
 import tensorflow as tf
 
@@ -46,7 +47,8 @@ def detect_fn(detection_model, image):
     return detections
 
 def load_image_into_numpy_array(path):
-    return np.array(Image.open(path))
+    img = cv2.imread(path, cv2.IMREAD_COLOR)
+    return np.array(img)
 
 
 def print_boxes(detections, image_np):
@@ -83,7 +85,7 @@ def get_data_entries(detections, image_np, slide_id, slide_deck_id):
     scores = detections['detection_scores']
     classes_pred = detections['detection_classes']
 
-    min_score_thresh = 0.40
+    min_score_thresh = 0.45
 
     bboxes = boxes[scores > min_score_thresh]
     scores_new = scores[scores > min_score_thresh]
@@ -126,92 +128,100 @@ def main(args):
 
     category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
     
-    image_root_path = "/home/fesiib/doc2slide/dataset_doc2ppt"
-    all_dataset = []
+    dataset_root_path = "/home/fesiib/doc2slide/datasets/data_raw"
 
-    total = 0
-    for _, dirs, _ in os.walk(image_root_path):
-        for image_folder_path in dirs:
-            image_parent_path = os.path.join(image_root_path, image_folder_path)
-            if (total > 3):
-                break
-            total += 1
-            for _, _, files in os.walk(image_parent_path):
-                for image_name in files:
-                    if image_name.endswith('.jpg') is False:
-                        continue
-                    image_path = os.path.join(image_parent_path, image_name)
-                    image_np = load_image_into_numpy_array(image_path)
-                    print(image_path)
-                    # ori_image = cv2.imread(image_path)
-                    # cv2.imshow("ori_image", ori_image)
-                    # cv2.waitKey(0)
-                    # cv2.destroyAllWindows()
+    def process_conference(conference_root_path, conference):
+        all_dataset = []
+        for _, dirs, _ in os.walk(conference_root_path):
+            for image_folder_path in dirs:
+                image_parent_path = os.path.join(conference_root_path, image_folder_path)
+                for _, _, files in os.walk(image_parent_path):
+                    for image_name in files:
+                        if image_name.endswith('.jpg') is False:
+                            continue
+                        image_path = os.path.join(image_parent_path, image_name)
+                        image_np = load_image_into_numpy_array(image_path)
+                        print(image_path)
+                        # ori_image = cv2.imread(image_path)
+                        # cv2.imshow("ori_image", ori_image)
+                        # cv2.waitKey(0)
+                        # cv2.destroyAllWindows()
 
-                    # Things to try:
-                    # Flip horizontally
-                    #image_np = np.fliplr(image_np).copy()
-                    # Convert image to grayscale
-                    #image_np = np.tile(np.mean(image_np, 2, keepdims=True), (1, 1, 3)).astype(np.uint8)
-                    input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
-                    detections = detect_fn(detection_model, input_tensor)
+                        # Things to try:
+                        # Flip horizontally
+                        #image_np = np.fliplr(image_np).copy()
+                        # Convert image to grayscale
+                        #image_np = np.tile(np.mean(image_np, 2, keepdims=True), (1, 1, 3)).astype(np.uint8)
+                        input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
+                        print(input_tensor.shape)
+                        detections = detect_fn(detection_model, input_tensor)
 
-                    num_detections = int(detections.pop('num_detections'))
-                    detections = {key: value[0, :num_detections].numpy()
+                        num_detections = int(detections.pop('num_detections'))
+                        detections = {key: value[0, :num_detections].numpy()
 
-                            
-                            
-                    for key, value in detections.items()}
+                                
+                                
+                        for key, value in detections.items()}
 
-                    #print(num_detections)
+                        #print(num_detections)
 
-                    detections['num_detections'] = num_detections
-                    
-                    cur_entries = get_data_entries(detections, image_np, image_name.split('.')[0], image_folder_path)
-                    all_dataset.extend(cur_entries)
+                        detections['num_detections'] = num_detections
+                        
+                        cur_entries = get_data_entries(detections, image_np, image_name.split('.')[0], conference+image_folder_path)
+                        all_dataset.extend(cur_entries)
 
-                    #print_boxes(detections, image_np)
+                        #print_boxes(detections, image_np)
 
-                    # for i in range(len(boxes)):
-                            
-                    #     ymin = int((box[i,0]*height))
-                    #     xmin = int((box[i,1]*width))
-                    #     ymax = int((box[i,2]*height))
-                    #     xmax = int((box[i,3]*width))
+                        # for i in range(len(boxes)):
+                                
+                        #     ymin = int((box[i,0]*height))
+                        #     xmin = int((box[i,1]*width))
+                        #     ymax = int((box[i,2]*height))
+                        #     xmax = int((box[i,3]*width))
 
-                    #     print(xmin, xmax, ymin , ymax)
+                        #     print(xmin, xmax, ymin , ymax)
 
-                    # Result = np.array(img_np[ymin:ymax,xmin:xmax])
+                        # Result = np.array(img_np[ymin:ymax,xmin:xmax])
 
 
-                    #print("Detections:", detections)
-                                # detection_classes should be ints.
-                    detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
+                        #print("Detections:", detections)
+                                    # detection_classes should be ints.
+                        detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
 
-                    # print("Detections_2:", detections['detection_boxes'])
+                        # print("Detections_2:", detections['detection_boxes'])
 
-                    label_id_offset = 1
-                    image_np_with_detections = image_np.copy()
+                        label_id_offset = 1
+                        image_np_with_detections = image_np.copy()
 
-                    viz_utils.visualize_boxes_and_labels_on_image_array(image_np_with_detections, detections['detection_boxes'],
-                                                                detections['detection_classes']+label_id_offset,
-                                                                            detections['detection_scores'],
-                                                                                        category_index,
-                                                                                                    use_normalized_coordinates=True,
-                                                                                                                max_boxes_to_draw=200,
-                                                                                                                            min_score_thresh=.30,
-                                                                                                                                        agnostic_mode=False)
-                    #result_path = os.path.join(os.getcwd(), 'results')
-                    #write_image(os.path.join(result_path, image_folder_path), image_name, image_np_with_detections)
-    if len(all_dataset) > 0:
-        csv_entries = []
-        csv_entries.append(all_dataset[0].keys())
-        for entry in all_dataset:
-            csv_entries.append(entry.values())
-        csv_file_path = os.path.join(os.getcwd(), 'results/slide_deck_dataset.csv')
-        with open(csv_file_path, 'w') as file:
-            writer = csv.writer(file)
-            writer.writerows(csv_entries)
+                        viz_utils.visualize_boxes_and_labels_on_image_array(image_np_with_detections, detections['detection_boxes'],
+                                                                    detections['detection_classes']+label_id_offset,
+                                                                                detections['detection_scores'],
+                                                                                            category_index,
+                                                                                                        use_normalized_coordinates=True,
+                                                                                                                    max_boxes_to_draw=200,
+                                                                                                                                min_score_thresh=.30,
+                                                                                                                                            agnostic_mode=False)
+                        #result_path = os.path.join(os.getcwd(), 'results')
+                        #write_image(os.path.join(result_path, image_folder_path), image_name, image_np_with_detections)
+            if len(all_dataset) > 0:
+                csv_entries = []
+                csv_entries.append(all_dataset[0].keys())
+                for entry in all_dataset:
+                    csv_entries.append(entry.values())
+                csv_file = 'slide_deck_dataset_' + conference + '.csv'
+                csv_file_path = os.path.join(os.path.join(os.getcwd(), 'results'), csv_file)
+                with open(csv_file_path, 'w') as file:
+                    writer = csv.writer(file)
+                    writer.writerows(csv_entries)
+            return
+    for f, dirs, _ in os.walk(dataset_root_path):
+        for conference in dirs:
+            conference_root_path = os.path.join(dataset_root_path, conference)
+            if conference == 'icml20':
+                continue
+            process_conference(conference_root_path, conference)
+        break
+        
 if __name__ == "__main__":
     main(sys.argv[1:])
 
