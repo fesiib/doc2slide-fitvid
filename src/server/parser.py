@@ -17,6 +17,14 @@ def crop_as_slide(image):
 
     return image[(ch-half_h):(ch+half_h), (cw-half_w):(cw+half_w)]
 
+def get_image_np(url):
+    response = request.urlopen(url)
+    image = np.asarray(bytearray(response.read()), dtype='uint8')
+    image = cv2.imdecode(image, cv2.IMREAD_COLOR)
+
+    image = crop_as_slide(image)
+    return image
+
 def main():
 
     for parent in range(10000):
@@ -26,11 +34,7 @@ def main():
             slide_file = str(slide) + '.jpg'
             url = parse.urljoin(parse.urljoin(ROOT_URL, parent_url), slide_file)
             try:
-                response = request.urlopen(url)
-                image = np.asarray(bytearray(response.read()), dtype='uint8')
-                image = cv2.imdecode(image, cv2.IMREAD_COLOR)
-
-                image = crop_as_slide(image)
+                image = get_image_np(url)
                 parent_path = os.path.join('/home/fesiib/doc2slide/dev/Doc2Slide-DL/results_doc2slide', str(parent))
                 if os.path.exists(parent_path) is False:
                     os.makedirs(parent_path)
