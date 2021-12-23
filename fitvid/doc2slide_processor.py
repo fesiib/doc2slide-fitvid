@@ -60,7 +60,7 @@ def print_boxes(detections, image_np):
 
     classes_pred = detections['detection_classes']
 
-    min_score_thresh = 0.25
+    min_score_thresh = 0.7
 
     bboxes = boxes[scores > min_score_thresh]
     scores_new = scores[scores > min_score_thresh]
@@ -77,19 +77,17 @@ def print_boxes(detections, image_np):
 
 def get_data_entries(detections, image_np, slide_id, slide_deck_id):
     entries = []
-    
-    boxes = detections['detection_boxes']
     height, width = image_np.shape[:2]
 
-    box = np.squeeze(boxes)
+    boxes = detections['detection_boxes']    
     scores = detections['detection_scores']
     classes_pred = detections['detection_classes']
 
-    min_score_thresh = 0.45
+    min_score_thresh = 0.7
 
-    bboxes = boxes[scores > min_score_thresh]
-    scores_new = scores[scores > min_score_thresh]
-    classes_pred_new = classes_pred[scores > min_score_thresh]
+    bboxes = boxes[scores >= min_score_thresh]
+    scores_new = scores[scores >= min_score_thresh]
+    classes_pred_new = classes_pred[scores >= min_score_thresh]
     for i, box in enumerate(bboxes):
         ymin, xmin, ymax, xmax = box
         entry = {
@@ -141,17 +139,19 @@ def main(args):
                 image_np = load_image_into_numpy_array(image_path)
                 print(image_path)
                 input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
-                print(input_tensor.shape)
                 detections = detect_fn(detection_model, input_tensor)
-
                 num_detections = int(detections.pop('num_detections'))
-                detections = {key: value[0, :num_detections].numpy()
-
-                        
-                        
-                for key, value in detections.items()}
-
+                detections = { 
+                    key : value[0, :num_detections].numpy() for key, value in detections.items()
+                }
                 detections['num_detections'] = num_detections
+                
+                # Filter
+                min_score_thresh = 0.7
+                scores = detections['detection_scores']
+                detections['detection_boxes'] = detections['detection_boxes'][scores >= min_score_thresh]
+                detections['detection_classes'] = detections['detection_classes'][scores >= min_score_thresh]
+                detections['detection_scores'] = detections['detection_scores'][scores >= min_score_thresh]
                 
                 cur_entries = get_data_entries(detections, image_np, image_name.split('.')[0], 'presentation_' + image_folder)
                 all_dataset.extend(cur_entries)
