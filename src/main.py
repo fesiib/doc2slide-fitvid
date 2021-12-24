@@ -1,17 +1,25 @@
+import os
 from flask import Flask
 from flask_cors import CORS
-from flask import request
+from flask import request, send_file
 
 import json
 import numpy as np
 
-from adaptation import adapt_example_slide
+from adaptation import CROPPED_IMAGES_PATH, adapt_example_slide
 from process import process_example
 
 app = Flask(__name__)
 CORS(app, origins = ["http://localhost:3000"])
 
 app.config["UPLOAD_EXTENSIONS"] = [".pdf", ".jpg", ".png"]
+
+# Images
+@app.route("/cropped_image/<image_name>", methods=["GET"])
+def get_cropped_image(image_name):
+    print(image_name)
+    image_path = os.path.join(CROPPED_IMAGES_PATH, image_name)
+    return send_file(image_path, mimetype='image/jpg')
 
 # Generate Requests
 @app.route("/example_adaptation/generate_slide_requests", methods=["POST"])
