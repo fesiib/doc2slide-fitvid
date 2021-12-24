@@ -6,8 +6,8 @@ import cv2
 
 from parser import get_image_np
 
-CROPPED_IMAGES_PATH = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/cropped_images"
-CUR_URL = "http://192.168.1.147:7777"
+CROPPED_IMAGES_PATH = "/home/bekzat/server/adaptation/cropped_images"
+CUR_URL = "http://server.hyungyu.com:7777"
 
 def create_cropped_image(url, xp, yp, wp, hp):
     image_np = get_image_np(url)
