@@ -1,23 +1,35 @@
 from uuid import uuid4 as random
 import numpy as np
 
-def px_to_pt(in_px):
-    return in_px * 0.75
-
 def adapt_example_slide(slide_info, example_info):
+    slide_id = slide_info["slide_id"]
+    slide_width = slide_info["slide_width"]
+    slide_height = slide_info["slide_height"]
+
     requests = []
     for element in example_info["elements"]:
         object_id =  str(random()).replace('-', '')
         url = element["design"]["url"]
+
+        example_width = element["image_width"]
+        example_height = element["image_height"]
+
+        width = element["width"] / example_width * slide_width
+        height = element["height"] / example_height * slide_height
+        x = element["x"] / example_width * slide_width
+        y = element["y"] / example_height * slide_height
+
+
+
         element_properties = {
-            "pageObjectId": slide_info["slide_id"],
+            "pageObjectId": slide_id,
             "size": {
                 "width": {
-                    "magnitude": px_to_pt(element["width"]), 
+                    "magnitude": round(width), 
                     "unit": 'PT'
                 },
                 "height": {
-                    "magnitude": px_to_pt(element["height"]), 
+                    "magnitude": round(height), 
                     "unit": 'PT'
                 }
             },
@@ -26,8 +38,8 @@ def adapt_example_slide(slide_info, example_info):
                 "scaleY": 1,
                 "shearX": 0,
                 "shearY": 0,
-                "translateX": px_to_pt(element["x"]),
-                "translateY": px_to_pt(element["y"]),
+                "translateX": round(x),
+                "translateY": round(y),
                 "unit": 'PT'
             },
         }

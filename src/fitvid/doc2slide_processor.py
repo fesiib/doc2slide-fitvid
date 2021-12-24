@@ -108,14 +108,14 @@ class LayoutDetection(object):
             entry = {
                 "slide_deck_id": slide_deck_id,
                 "slide_id": slide_id,
-                "image_height": height,
-                "iamge_width": width,
+                "image_height": height * 0.75,
+                "image_width": width * 0.75,
                 "type": CLASS_LABELS[classes_pred[i]],
                 "confidence": round(scores[i] * 100),
-                'x': int(xmin * width),
-                'y': int(ymin * height),
-                'width': int((xmax-xmin) * width),
-                'height': int((ymax-ymin) * height),
+                'x': int(xmin * width * 0.75),
+                'y': int(ymin * height * 0.75),
+                'width': int((xmax-xmin) * width * 0.75),
+                'height': int((ymax-ymin) * height * 0.75),
             }
             entries.append(entry)
         return entries
