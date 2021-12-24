@@ -1,5 +1,9 @@
 import os
 import sys
+
+sys.path.insert(1, os.path.abspath('./src/fitvid/'))
+print(os.path.abspath('.'))
+
 from google.protobuf.text_format import Error
 from six import print_
 import tensorflow as tf
@@ -20,9 +24,9 @@ import csv
 PATH_TO_MODEL_DIR = "/home/fesiib/doc2slide/models/fitvid"
 PATH_TO_CFG = PATH_TO_MODEL_DIR + "/centernet_hourglass104_512x512_coco17_tpu-8_document_for_sharing_finetuning.config"
 PATH_TO_CKPT = PATH_TO_MODEL_DIR + "/"  
-PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/fitvid/document_label_map.pbtxt"
+PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/src/fitvid/document_label_map.pbtxt"
 
-CLASS_LABELS = [
+ORIGINAL_CLASS_LABELS = [
     'title',
     'header',
     'text box',
@@ -36,6 +40,85 @@ CLASS_LABELS = [
     'chart',
     'schematic diagram',
 ]
+
+CLASS_LABELS = [
+    'title',
+    'header',
+    'text',
+    'footer',
+    'figure',
+    'figure',
+    'figure',
+    'figure',
+    'figure',
+    'figure',
+    'figure',
+    'figure',
+]
+
+class LayoutDetection(object):
+    def __init__(self):
+        self.min_score_thresh = 0.3
+        
+        configs = config_util.get_configs_from_pipeline_file(PATH_TO_CFG)
+        model_config = configs['model']
+        
+        self.detection_model = model_builder.build(model_config=model_config, is_training=False)
+        # Restore checkpoint
+        ckpt = tf.compat.v2.train.Checkpoint(model=self.detection_model )
+        ckpt.restore(os.path.join(PATH_TO_CKPT, 'ckpt-141')).expect_partial()
+
+        self.category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
+        return
+    
+    def detect(self, image_np, slide_deck_id, slide_id):
+        image_np = self._preprocess(image_np)
+
+        input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
+        detections = detect_fn(self.detection_model, input_tensor)
+        num_detections = int(detections.pop('num_detections'))
+        detections = { 
+            key : value[0, :num_detections].numpy() for key, value in detections.items()
+        }
+        detections['num_detections'] = num_detections
+        
+        # Filter
+        scores = detections['detection_scores']
+        detections['detection_boxes'] = detections['detection_boxes'][scores >= self.min_score_thresh]
+        detections['detection_classes'] = detections['detection_classes'][scores >= self.min_score_thresh]
+        detections['detection_scores'] = detections['detection_scores'][scores >= self.min_score_thresh]
+        
+        cur_entries = self._get_entries(detections, image_np, slide_id, slide_deck_id)
+        print(cur_entries)
+        return cur_entries
+
+    def _preprocess(self, image_np):
+        return image_np
+
+    def _get_entries(self, detections, image_np, slide_id, slide_deck_id):
+        entries = []
+        height, width = image_np.shape[:2]
+
+        bboxes = detections['detection_boxes']    
+        scores = detections['detection_scores']
+        classes_pred = detections['detection_classes']
+
+        for i, box in enumerate(bboxes):
+            ymin, xmin, ymax, xmax = box
+            entry = {
+                "slide_deck_id": slide_deck_id,
+                "slide_id": slide_id,
+                "image_height": height,
+                "iamge_width": width,
+                "type": CLASS_LABELS[classes_pred[i]],
+                "confidence": round(scores[i] * 100),
+                'x': int(xmin * width),
+                'y': int(ymin * height),
+                'width': int((xmax-xmin) * width),
+                'height': int((ymax-ymin) * height),
+            }
+            entries.append(entry)
+        return entries
 
 @tf.function
 def detect_fn(detection_model, image):
