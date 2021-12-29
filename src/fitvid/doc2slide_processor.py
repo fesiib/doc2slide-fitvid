@@ -21,10 +21,10 @@ import warnings
 import cv2
 import csv
 
-PATH_TO_MODEL_DIR = "/home/fesiib/doc2slide/models/fitvid"
+PATH_TO_MODEL_DIR = "/home/bekzat/models/fitvid"
 PATH_TO_CFG = PATH_TO_MODEL_DIR + "/centernet_hourglass104_512x512_coco17_tpu-8_document_for_sharing_finetuning.config"
 PATH_TO_CKPT = PATH_TO_MODEL_DIR + "/"  
-PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/src/fitvid/document_label_map.pbtxt"
+PATH_TO_LABELS = "/home/bekzat/server/adaptation/src/fitvid/document_label_map.pbtxt"
 
 ORIGINAL_CLASS_LABELS = [
     'title',
@@ -58,7 +58,7 @@ CLASS_LABELS = [
 
 class LayoutDetection(object):
     def __init__(self):
-        self.min_score_thresh = 0.3
+        self.min_score_thresh = 0.7
         
         configs = config_util.get_configs_from_pipeline_file(PATH_TO_CFG)
         model_config = configs['model']
@@ -89,7 +89,7 @@ class LayoutDetection(object):
         detections['detection_scores'] = detections['detection_scores'][scores >= self.min_score_thresh]
         
         cur_entries = self._get_entries(detections, image_np, slide_id, slide_deck_id)
-        print(cur_entries)
+        #print(cur_entries)
         return cur_entries
 
     def _preprocess(self, image_np):

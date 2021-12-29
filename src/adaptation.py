@@ -9,8 +9,7 @@ from parser import get_image_np
 CROPPED_IMAGES_PATH = "/home/bekzat/server/adaptation/cropped_images"
 CUR_URL = "http://server.hyungyu.com:7777"
 
-def create_cropped_image(url, xp, yp, wp, hp):
-    image_np = get_image_np(url)
+def create_cropped_image(image_np, xp, yp, wp, hp):
     h, w, _ = image_np.shape
 
     sy = round(yp * h)
@@ -18,8 +17,9 @@ def create_cropped_image(url, xp, yp, wp, hp):
     sx = round(xp * w)
     fx = round((xp + wp) * w)
 
-    image_np = image_np[sy:fy, sx:fx]
+    return image_np[sy:fy, sx:fx]
 
+def save_cropped_image(image_np):
     image_name = str(random()).replace('-', '') + ".jpg"
     parent_path = CROPPED_IMAGES_PATH
     if os.path.exists(parent_path) is False:
@@ -47,7 +47,9 @@ def adapt_example_slide(slide_info, example_info):
         x = element["x"]
         y = element["y"]
 
-        url = create_cropped_image(url, x / example_width, y / example_height, width / example_width, height / example_height)
+        image_np = get_image_np(url)
+        image_np = create_cropped_image(image_np, x / example_width, y / example_height, width / example_width, height / example_height)
+        url = save_cropped_image(image_np)
 
         element_properties = {
             "pageObjectId": slide_id,
