@@ -58,7 +58,7 @@ CLASS_LABELS = [
 
 class LayoutDetection(object):
     def __init__(self):
-        self.min_score_thresh = 0.7
+        self.min_score_thresh = 0.4
         
         configs = config_util.get_configs_from_pipeline_file(PATH_TO_CFG)
         model_config = configs['model']

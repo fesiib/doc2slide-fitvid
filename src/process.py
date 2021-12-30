@@ -59,7 +59,7 @@ def process_text(data, font_attributes):
             continue
         line_num = data["line_num"][i]
         
-        if line_num == cur_line_num and i > 0:
+        if line_num == cur_line_num:
             paragraph += ' '
 
         while (line_num > cur_line_num):
@@ -73,7 +73,7 @@ def process_text(data, font_attributes):
         width = data["width"][i]
         #print(line_num, text, conf, "x=", left, "y=", top, "w=", width, "h=", height)
     
-    text_properties["paragraphs"].append(paragraph)
+    text_properties["paragraphs"].append(paragraph.strip())
     return text_properties
 
 def process_example(url, example_deck_id, example_id):
@@ -89,8 +89,6 @@ def process_example(url, example_deck_id, example_id):
     with PyTessBaseAPI(path='./tessdata', oem=OEM.TESSERACT_ONLY) as api:
         for bb in bbs:
             element = dict(bb)
-
-            element_type = element["type"]
 
             example_width = element["image_width"]
             example_height = element["image_height"]
@@ -109,7 +107,10 @@ def process_example(url, example_deck_id, example_id):
             #cropped_image_np = preprocess_for_detection(cropped_image_np)
             data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
             font_attributes = process_font(api, cropped_image_np)
+            if font_attributes is None:
+                element["type"] = 'figure'
 
+            element_type = element["type"]
             if element_type == 'figure':
                 element["design"] = {
                     'url': url,
