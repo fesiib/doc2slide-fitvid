@@ -46,9 +46,12 @@ def process_text(data, font_attributes):
         "font_size": font_attributes["pointsize"],
         "font_style": font_attributes["font_name"],
         "font_color": (0, 0, 0),
-        "content": ""
+        "paragraphs": [],
+        "font_attributes": font_attributes,
+        "bullet": False,
     }
     cur_line_num = 1
+    paragraph = ""
     for i in range(len(data["text"])):
         text = data["text"][i]
         conf = int(data["conf"][i])
@@ -57,18 +60,20 @@ def process_text(data, font_attributes):
         line_num = data["line_num"][i]
         
         if line_num == cur_line_num and i > 0:
-            text_properties["content"] += ' '
+            paragraph += ' '
 
         while (line_num > cur_line_num):
-            text_properties["content"] += '\n'
+            paragraph += '\n'
             cur_line_num += 1
-        text_properties["content"] += text
+        paragraph += text
         
         left = data["left"][i]
         top = data["top"][i]
         height = data["height"][i]
         width = data["width"][i]
         #print(line_num, text, conf, "x=", left, "y=", top, "w=", width, "h=", height)
+    
+    text_properties["paragraphs"].append(paragraph)
     return text_properties
 
 def process_example(url, example_deck_id, example_id):
@@ -111,10 +116,5 @@ def process_example(url, example_deck_id, example_id):
                 }
             else:
                 element["design"] = process_text(data, font_attributes)
-                print(element["design"])
-                element["design"] = {
-                    'url': url,
-                }
-
             info["elements"].append(element)
     return info
