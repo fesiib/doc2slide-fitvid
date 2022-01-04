@@ -7,8 +7,8 @@ from fitvid.doc2slide_processor import LayoutDetection
 
 from parser import get_image_np
 from adaptation import create_cropped_image
-
-CONF_THRESHOLD = 50
+from detect import detect_background_color, detect_font_color
+from parameters import CONF_THRESHOLD
 
 # Models
 layout_detector = LayoutDetection()
@@ -45,7 +45,7 @@ def process_text(data, font_attributes):
     text_properties = {
         "font_size": font_attributes["pointsize"],
         "font_style": font_attributes["font_name"],
-        "font_color": (0, 0, 0),
+        "font_color": font_attributes["font_color"],
         "paragraphs": [],
         "font_attributes": font_attributes,
         "bullet": False,
@@ -79,9 +79,10 @@ def process_text(data, font_attributes):
 def process_example(url, example_deck_id, example_id):
     image_np = get_image_np(url)
     bbs = layout_detector.detect(image_np, example_deck_id, example_id)
+    backgorund_color = detect_background_color(image_np, bbs)
     info = {
         "page": {
-            "background": (255, 255, 255),
+            "background_color": backgorund_color,
             "has_slide_number": False,
         },
         "elements": [],
@@ -109,6 +110,8 @@ def process_example(url, example_deck_id, example_id):
             font_attributes = process_font(api, cropped_image_np)
             if font_attributes is None:
                 element["type"] = 'figure'
+            else:
+                font_attributes["font_color"] = detect_font_color(cropped_image_np, data, backgorund_color)
 
             element_type = element["type"]
             if element_type == 'figure':

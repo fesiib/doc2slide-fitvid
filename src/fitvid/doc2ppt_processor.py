@@ -17,25 +17,7 @@ import warnings
 import cv2
 import csv
 
-PATH_TO_MODEL_DIR = "/home/fesiib/doc2slide/models/fitvid"
-PATH_TO_CFG = PATH_TO_MODEL_DIR + "/centernet_hourglass104_512x512_coco17_tpu-8_document_for_sharing_finetuning.config"
-PATH_TO_CKPT = PATH_TO_MODEL_DIR + "/"  
-PATH_TO_LABELS = "/home/fesiib/doc2slide/dev/Doc2Slide-DL/fitvid/document_label_map.pbtxt"
-
-CLASS_LABELS = [
-    'title',
-    'header',
-    'text box',
-    'footer',
-    'picture',
-    'instructor',
-    'diagram',
-    'table',
-    'figure',
-    'handwriting',
-    'chart',
-    'schematic diagram',
-]
+from parameters import PATH_TO_CFG, PATH_TO_CKPT, PATH_TO_LABELS, CLASS_LABELS
 
 @tf.function
 def detect_fn(detection_model, image):

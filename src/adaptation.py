@@ -6,8 +6,7 @@ import cv2
 
 from parser import get_image_np
 
-CROPPED_IMAGES_PATH = "/home/bekzat/server/adaptation/cropped_images"
-CUR_URL = "http://server.hyungyu.com:7777"
+from parameters import CROPPED_IMAGES_PATH, CUR_URL
 
 def create_cropped_image(image_np, xp, yp, wp, hp):
     h, w, _ = image_np.shape
@@ -31,14 +30,12 @@ def save_cropped_image(image_np):
 
 def get_optional_color(color_tup):
     return {
-        "opaqueColor": {
-            "rgbColor": {
-                "red": color_tup[0],
-                "green": color_tup[1],
-                "blue": color_tup[2]
-            }
-        }
-    }
+        "rgbColor": {
+            "red": color_tup[0],
+            "green": color_tup[1],
+            "blue": color_tup[2]
+        },
+}   
 
 def get_text_style(design):
     font_attributes = design["font_attributes"]
@@ -46,7 +43,9 @@ def get_text_style(design):
         # "backgroundColor": {
             
         # },
-        "foregroundColor": get_optional_color(design["font_color"]),
+        "foregroundColor": {
+            "opaqueColor": get_optional_color(design["font_color"])
+        },
         "bold": font_attributes["bold"],
         "italic": font_attributes["italic"],
         "fontFamily": font_attributes["font_name"],
@@ -99,6 +98,25 @@ def adapt_example_slide(slide_info, example_info):
     slide_height = slide_info["slide_height"]
 
     requests = []
+
+
+    # Page Properties
+    page_properties = {
+        "pageBackgroundFill": {
+            "solidFill": {
+                "color": get_optional_color(example_info["page"]["background_color"]),
+            }
+        }
+    }
+    requests.append({
+        "updatePageProperties": {
+            "objectId": slide_id,
+            "pageProperties": page_properties,
+            "fields": "pageBackgroundFill.solidFill.color"
+        }
+    })
+
+    # Page Elements
     for element in example_info["elements"]:
         object_id =  str(random()).replace('-', '')
         example_width = element["image_width"]

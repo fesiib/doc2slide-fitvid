@@ -6,7 +6,8 @@ from flask import request, send_file
 import json
 import numpy as np
 
-from adaptation import CROPPED_IMAGES_PATH, adapt_example_slide
+from parameters import CROPPED_IMAGES_PATH
+from adaptation import adapt_example_slide
 from process import process_example
 
 app = Flask(__name__)
