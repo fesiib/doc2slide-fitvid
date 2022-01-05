@@ -84,8 +84,8 @@ def main():
 
     #process_example('http://server.hyungyu.com:3001/frame_parsed/0/2.jpg', '0', '2')
     #process_example('http://server.hyungyu.com:3001/frame_parsed/1/2.jpg', '0', '2')
-    process_example('http://server.hyungyu.com:3001/frame_parsed/32/7.jpg', '0', '2')
-    #app.run(host="0.0.0.0", port=7777)
+    #process_example('http://server.hyungyu.com:3001/frame_parsed/32/7.jpg', '0', '2')
+    app.run(host="0.0.0.0", port=7777)
 
 if __name__ == "__main__":
     main()

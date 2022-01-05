@@ -9,7 +9,11 @@ from parser import get_image_np
 from parameters import CROPPED_IMAGES_PATH, CUR_URL
 
 def create_cropped_image(image_np, xp, yp, wp, hp):
-    h, w, _ = image_np.shape
+    h, w = 0, 0
+    if len(image_np.shape) == 3:
+        h, w, _ = image_np.shape
+    else:
+        h, w = image_np.shape    
 
     sy = round(yp * h)
     fy = round((yp + hp) * h)
@@ -40,38 +44,37 @@ def get_optional_color(color_tup):
         },
 }   
 
-def get_text_style(design):
-    font_attributes = design["font_attributes"]
+def get_text_style(font_attr):
     return {
         # "backgroundColor": {
             
         # },
         "foregroundColor": {
-            "opaqueColor": get_optional_color(design["font_color"])
+            "opaqueColor": get_optional_color(font_attr["font_color"])
         },
-        "bold": font_attributes["bold"],
-        "italic": font_attributes["italic"],
-        "fontFamily": font_attributes["font_name"],
+        "bold": font_attr["bold"],
+        "italic": font_attr["italic"],
+        "fontFamily": font_attr["font_name"],
         "fontSize": {
-            "magnitude": font_attributes["pointsize"], 
+            "magnitude": font_attr["pointsize"], 
             "unit": 'PT'
         },
         # "link": {
         #     object (Link)
         # },
         #"baselineOffset": enum (BaselineOffset),
-        "smallCaps": font_attributes["smallcaps"],
+        "smallCaps": font_attr["smallcaps"],
         #"strikethrough": font_attributes["smallcaps"],
-        "underline": font_attributes["underlined"],
+        "underline": font_attr["underlined"],
         # "weightedFontFamily": {
         #     object (WeightedFontFamily)
         # }
     }
 
-def get_paragraph_style(design):
+def get_paragraph_style(paragraph_attr):
     return {
-        "lineSpacing": 1,
-        "alignment": "START",
+        "lineSpacing": 1.15,
+        "alignment": paragraph_attr["justification"],
         "indentStart": {
             "magnitude": 0, 
             "unit": 'PT'
@@ -101,7 +104,6 @@ def adapt_example_slide(slide_info, example_info):
     slide_height = slide_info["slide_height"]
 
     requests = []
-
 
     # Page Properties
     page_properties = {
@@ -176,8 +178,12 @@ def adapt_example_slide(slide_info, example_info):
                 }
             })
             paragraphs = element["design"]["paragraphs"]
+            font_attributes = element["design"]["font_attributes"]
+            paragraph_attributes = element["design"]["paragraph_attributes"]
             insertionIndex = 0
-            for paragraph in paragraphs:
+            for paragraph, font_attr, paragraph_attr in zip(paragraphs, font_attributes, paragraph_attributes):
+                paragraph += '\n'
+                print(insertionIndex, paragraph, font_attr, paragraph_attr)
                 requests.append({
                     "insertText": {
                         "objectId": object_id,
@@ -185,28 +191,30 @@ def adapt_example_slide(slide_info, example_info):
                         "insertionIndex": insertionIndex
                     }
                 })
-                if len(paragraph) > 0:
+                if len(paragraph) > 1:
                     requests.append({
                         "updateTextStyle": {
                             "objectId": object_id,
-                            "style": get_text_style(element["design"]),
+                            "style": get_text_style(font_attr),
                             "textRange": {
                                 "startIndex": insertionIndex,
-                                "type": "FROM_START_INDEX"
+                                "endIndex": insertionIndex + len(paragraph),
+                                "type": "FIXED_RANGE"
                             },
                             "fields": "*",
                         }
                     })
-                # requests.append({
-                #     "updateParagraphStyle": {
-                #         "objectId": object_id,
-                #         "style": get_paragraph_style(element["design"]),
-                #         "textRange": {
-                #             "startIndex": insertionIndex,
-                #             "type": "FROM_START_INDEX"
-                #         },
-                #         "fields": "*",
-                #     }
-                # })
+                    # requests.append({
+                    #     "updateParagraphStyle": {
+                    #         "objectId": object_id,
+                    #         "style": get_paragraph_style(paragraph_attr),
+                    #         "textRange": {
+                    #             "startIndex": insertionIndex,
+                    #             "endIndex": insertionIndex + len(paragraph),
+                    #             "type": "FIXED_RANGE"
+                    #         },
+                    #         "fields": "*",
+                    #     }
+                    # })
                 insertionIndex += len(paragraph)
     return requests

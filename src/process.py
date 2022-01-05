@@ -47,6 +47,21 @@ def calc_intersection_ratio(field, box):
         return 0
     return (inter[2] - inter[0]) * (inter[3] - inter[1]) / (box[2] * box[3])
 
+def convert_paragraph_info(paragraph_info):
+    paragraph_attributes = {
+        "justification": paragraph_info[0],
+        "is_list_item": paragraph_info[1],
+        "is_crown": paragraph_info[2],
+        "first_line_indent": paragraph_info[3],
+    }
+    if (paragraph_info[0] == 'RIGHT'):
+        paragraph_attributes["justification"] = 'END'
+    elif (paragraph_info[0] == 'CENTER'):
+        paragraph_attributes["justification"] = 'CENTER'
+    else:
+        paragraph_attributes["justification"] = 'START'
+    return paragraph_attributes
+
 '''
 background: {
     color: rgba
@@ -69,21 +84,28 @@ def get_data(api, image_np):
     api.SetImage(pil_image_np)
     api.Recognize()
     ri = api.GetIterator()
-    level = RIL.WORD
+    level = RIL.PARA
     data = []
 
     for r in iterate_level(ri, level):
-        word = r.GetUTF8Text(level)
+        paragraph = r.GetUTF8Text(level).strip()
         conf = r.Confidence(level)
         font_attr = r.WordFontAttributes()
         left, top, right, bottom = r.BoundingBox(level)
+        paragraph_info = r.ParagraphInfo()
         width = max(right - left, 0)
         height = max(bottom - top, 0)
-        if word:
+        if font_attr is not None:
+            font_attr["font_name"] = font_attr["font_name"].replace('_', ' ')
+
+        if paragraph_info is not None:
+            paragraph_info = convert_paragraph_info(paragraph_info)
+        if paragraph:
             data.append({
-                "text": word,
+                "text": paragraph,
                 "conf": conf,
                 "font_attr": font_attr,
+                "paragraph_attr": paragraph_info,
                 "left": left,
                 "top": top,
                 "width": width,
@@ -95,17 +117,20 @@ def process_text(data):
     text_properties = {
         "paragraphs": [],
         "font_attributes": [],
+        "paragraph_attributes": [],
         "bullet": False,
     }
-    paragraph = ""
     for entry in data:
         text = entry["text"]
         conf = int(entry["conf"])
         if (conf < CONF_THRESHOLD):
             continue
-        paragraph += text + " "
         print(text, conf, "x=", entry["left"], "y=", entry["top"], "w=", entry["width"], "h=", entry["height"])
-    text_properties["paragraphs"].append(paragraph.strip())
+        font_attr = entry["font_attr"]
+        paragraph_attr = entry["paragraph_attr"]
+        text_properties["paragraphs"].append(text)
+        text_properties["font_attributes"].append(font_attr)
+        text_properties["paragraph_attributes"].append(paragraph_attr)
     return text_properties
 
 def process_example(url, example_deck_id, example_id):
@@ -124,9 +149,6 @@ def process_example(url, example_deck_id, example_id):
             },
             "elements": [],
         }
-        data = get_data(api, gray_np)
-        for entry in data:
-            print(entry)
         for bb in bbs:
             element = dict(bb)
             example_width = element["image_width"]
@@ -141,7 +163,8 @@ def process_example(url, example_deck_id, example_id):
             # 'text',
             # 'footer',
             # 'figure',
-            #cropped_image_np = create_cropped_image(image_np, x, y, w, h)
+            cropped_image_np = create_cropped_image(image_np, x, y, w, h)
+            cropped_gray_np = create_cropped_image(gray_np, x, y, w, h)
             #data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
             
             cur_data = []
@@ -157,6 +180,7 @@ def process_example(url, example_deck_id, example_id):
                 height /= SLIDE_HEIGHT
                 if calc_intersection_ratio((x, y, w, h), (left, top, width, height)) < INTERSECTION_THRESHOLD:
                     continue
+                entry["font_attr"]["font_color"] = detect_font_color(cropped_image_np, cropped_gray_np)
                 cur_data.append(entry)
 
             if len(cur_data) == 0:
