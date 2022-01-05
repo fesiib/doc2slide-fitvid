@@ -1,21 +1,51 @@
 import pytesseract
-from tesserocr import PyTessBaseAPI, OEM, PSM, get_languages
 import cv2
+import numpy as np
+
+from tesserocr import PyTessBaseAPI, OEM, PSM, get_languages, RIL, iterate_level
 from PIL import Image
 
 from fitvid.doc2slide_processor import LayoutDetection
 
 from parser import get_image_np
-from adaptation import create_cropped_image
+from adaptation import create_cropped_image, save_cropped_image
 from detect import detect_background_color, detect_font_color
-from parameters import CONF_THRESHOLD
+from parameters import CONF_THRESHOLD, INTERSECTION_THRESHOLD, SLIDE_WIDTH, SLIDE_HEIGHT
 
 # Models
 layout_detector = LayoutDetection()
 
-def preprocess_for_detection(image_np):
+def preprocess_for_detection(image_np, data):
     gray = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
-    return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    image_height, image_width = gray.shape
+    gray_masked = gray.copy()
+    for entry in data:
+        left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+        gray_masked = cv2.rectangle(gray_masked, (left, top), (left+width, top+height), 255, -1)
+    if (np.sum(gray_masked < 123) > image_height * image_width / 2):
+        image_np = 255 - image_np
+        gray = 255 - gray
+    
+    gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 13, 5)
+    save_cropped_image(gray_masked, "a_gray_masked")
+    save_cropped_image(gray, "a_gray")
+    save_cropped_image(image_np, "a_thresh")
+    return image_np, gray
+
+def calc_intersection_ratio(field, box):
+    inter = (
+        max(field[0], box[0]), 
+        max(field[1], box[1]),
+        min(field[0] + field[2], box[0] + box[2]),
+        min(field[1] + field[3], box[1] + box[3]),
+    )
+    # inter[0] = x1
+    # inter[1] = y1
+    # inter[2] = x2
+    # inter[3] = y2
+    if inter[0] >= inter[2] or inter[1] > inter[3]:
+        return 0
+    return (inter[2] - inter[0]) * (inter[3] - inter[1]) / (box[2] * box[3])
 
 '''
 background: {
@@ -34,91 +64,109 @@ text: {
 }
 
 '''
-def process_font(api, image_np):
+def get_data(api, image_np):
     pil_image_np = Image.fromarray(image_np)
     api.SetImage(pil_image_np)
     api.Recognize()
-    iterator = api.GetIterator()
-    return iterator.WordFontAttributes()
+    ri = api.GetIterator()
+    level = RIL.WORD
+    data = []
 
-def process_text(data, font_attributes):
+    for r in iterate_level(ri, level):
+        word = r.GetUTF8Text(level)
+        conf = r.Confidence(level)
+        font_attr = r.WordFontAttributes()
+        left, top, right, bottom = r.BoundingBox(level)
+        width = max(right - left, 0)
+        height = max(bottom - top, 0)
+        if word:
+            data.append({
+                "text": word,
+                "conf": conf,
+                "font_attr": font_attr,
+                "left": left,
+                "top": top,
+                "width": width,
+                "height": height
+            })
+    return data
+
+def process_text(data):
     text_properties = {
-        "font_size": font_attributes["pointsize"],
-        "font_style": font_attributes["font_name"],
-        "font_color": font_attributes["font_color"],
         "paragraphs": [],
-        "font_attributes": font_attributes,
+        "font_attributes": [],
         "bullet": False,
     }
-    cur_line_num = 1
     paragraph = ""
-    for i in range(len(data["text"])):
-        text = data["text"][i]
-        conf = int(data["conf"][i])
+    for entry in data:
+        text = entry["text"]
+        conf = int(entry["conf"])
         if (conf < CONF_THRESHOLD):
             continue
-        line_num = data["line_num"][i]
-        
-        if line_num == cur_line_num:
-            paragraph += ' '
-
-        while (line_num > cur_line_num):
-            paragraph += '\n'
-            cur_line_num += 1
-        paragraph += text
-        
-        left = data["left"][i]
-        top = data["top"][i]
-        height = data["height"][i]
-        width = data["width"][i]
-        #print(line_num, text, conf, "x=", left, "y=", top, "w=", width, "h=", height)
-    
+        paragraph += text + " "
+        print(text, conf, "x=", entry["left"], "y=", entry["top"], "w=", entry["width"], "h=", entry["height"])
     text_properties["paragraphs"].append(paragraph.strip())
     return text_properties
 
 def process_example(url, example_deck_id, example_id):
     image_np = get_image_np(url)
-    bbs = layout_detector.detect(image_np, example_deck_id, example_id)
-    backgorund_color = detect_background_color(image_np, bbs)
-    info = {
-        "page": {
-            "background_color": backgorund_color,
-            "has_slide_number": False,
-        },
-        "elements": [],
-    }
+    image_np = cv2.resize(image_np, (SLIDE_WIDTH, SLIDE_HEIGHT), interpolation=cv2.INTER_LINEAR)
+
     with PyTessBaseAPI(path='./tessdata', oem=OEM.TESSERACT_ONLY) as api:
+        data = get_data(api, image_np)
+        proc_image_np, gray_np = preprocess_for_detection(image_np.copy(), data)
+        bbs = layout_detector.detect(proc_image_np, example_deck_id, example_id)
+        backgorund_color = detect_background_color(image_np, gray_np)
+        info = {
+            "page": {
+                "background_color": backgorund_color,
+                "has_slide_number": False,
+            },
+            "elements": [],
+        }
+        data = get_data(api, gray_np)
+        for entry in data:
+            print(entry)
         for bb in bbs:
             element = dict(bb)
-
             example_width = element["image_width"]
             example_height = element["image_height"]
-            width = element["width"]
-            
-            height = element["height"]
-            x = element["x"]
-            y = element["y"]
+            w = element["width"] / example_width
+            h = element["height"] / example_height
+            x = element["x"] / example_width
+            y = element["y"] / example_height
 
             # 'title',
             # 'header',
             # 'text',
             # 'footer',
             # 'figure',
-            cropped_image_np = create_cropped_image(image_np, x / example_width, y / example_height, width / example_width, height / example_height)
-            #cropped_image_np = preprocess_for_detection(cropped_image_np)
-            data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
-            font_attributes = process_font(api, cropped_image_np)
-            if font_attributes is None:
-                element["type"] = 'figure'
-            else:
-                font_attributes["font_color"] = detect_font_color(cropped_image_np, data, backgorund_color)
+            #cropped_image_np = create_cropped_image(image_np, x, y, w, h)
+            #data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
+            
+            cur_data = []
+            
+            for entry in data:
+                left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+                text = entry["text"]
+                if (text == ''):
+                    continue
+                left /= SLIDE_WIDTH
+                width /= SLIDE_WIDTH
+                top /= SLIDE_HEIGHT
+                height /= SLIDE_HEIGHT
+                if calc_intersection_ratio((x, y, w, h), (left, top, width, height)) < INTERSECTION_THRESHOLD:
+                    continue
+                cur_data.append(entry)
 
-            element_type = element["type"]
-            if element_type == 'figure':
+            if len(cur_data) == 0:
+                element["type"] = 'figure'
+
+            if element["type"] == 'figure':
                 element["design"] = {
                     'url': url,
                 }
             else:
-                element["design"] = process_text(data, font_attributes)
+                element["design"] = process_text(cur_data)
             info["elements"].append(element)
     return info

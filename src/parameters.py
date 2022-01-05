@@ -1,9 +1,13 @@
 COLOR_SIM_THRESHOLD = 20
+INTERSECTION_THRESHOLD = 0.8
 
 CONF_THRESHOLD = 50
 
 CROPPED_IMAGES_PATH = "/home/bekzat/server/adaptation/cropped_images"
 CUR_URL = "http://server.hyungyu.com:7777"
+
+SLIDE_WIDTH = 960
+SLIDE_HEIGHT = 540
 
 # FITVID MODEL
 PATH_TO_MODEL_DIR = "/home/bekzat/models/fitvid"

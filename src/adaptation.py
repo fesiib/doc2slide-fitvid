@@ -18,13 +18,16 @@ def create_cropped_image(image_np, xp, yp, wp, hp):
 
     return image_np[sy:fy, sx:fx]
 
-def save_cropped_image(image_np):
-    image_name = str(random()).replace('-', '') + ".jpg"
+def save_cropped_image(image_np, image_name = None):
+    if image_name is None:
+        image_name = str(random()).replace('-', '')
+    image_name += ".jpg"
     parent_path = CROPPED_IMAGES_PATH
     if os.path.exists(parent_path) is False:
         os.makedirs(parent_path)
-
     image_path = os.path.join(parent_path, image_name)
+    if os.path.exists(image_path):
+        os.remove(image_path)
     print(CUR_URL + '/cropped_image/' + image_name, cv2.imwrite(image_path, image_np))
     return CUR_URL + '/cropped_image/' + image_name
 
