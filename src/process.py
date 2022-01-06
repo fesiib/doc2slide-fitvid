@@ -20,10 +20,13 @@ def preprocess_for_detection(image_np, data):
     gray = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
     image_height, image_width = gray.shape
     gray_masked = gray.copy()
+    figures_area = 0
     for entry in data:
         left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
         gray_masked = cv2.rectangle(gray_masked, (left, top), (left+width, top+height), 255, -1)
-    if (np.sum(gray_masked < 123) > image_height * image_width / 2):
+        if entry["type"] == 'figure':
+            figures_area += width * height
+    if (np.sum(gray_masked < 123) > (image_height * image_width - figures_area) / 2):
         image_np = 255 - image_np
         gray = 255 - gray
         gray_masked = 255 - gray_masked
