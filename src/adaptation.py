@@ -32,7 +32,8 @@ def save_cropped_image(image_np, image_name = None):
     image_path = os.path.join(parent_path, image_name)
     if os.path.exists(image_path):
         os.remove(image_path)
-    print(CUR_URL + '/cropped_image/' + image_name, cv2.imwrite(image_path, image_np))
+    cv2.imwrite(image_path, image_np)
+    #print(CUR_URL + '/cropped_image/' + image_name)
     return CUR_URL + '/cropped_image/' + image_name
 
 def get_optional_color(color_tup):
@@ -54,7 +55,7 @@ def get_text_style(font_attr):
         },
         "bold": font_attr["bold"],
         "italic": font_attr["italic"],
-        "fontFamily": font_attr["font_name"],
+        "fontFamily": font_attr["font_family"],
         "fontSize": {
             "magnitude": font_attr["pointsize"], 
             "unit": 'PT'
@@ -127,30 +128,30 @@ def adapt_example_slide(slide_info, example_info):
         example_width = element["image_width"]
         example_height = element["image_height"]
 
-        width = element["width"]
-        height = element["height"]
-        x = element["x"]
-        y = element["y"]
+        width = element["width"] / example_width
+        height = element["height"] / example_height
+        left = element["left"] / example_width
+        top = element["top"] / example_height
 
         element_properties = {
             "pageObjectId": slide_id,
             "size": {
                 "width": {
-                    "magnitude": width, 
+                    "magnitude": int(width * slide_width), 
                     "unit": 'PT'
                 },
                 "height": {
-                    "magnitude": height, 
+                    "magnitude": int(height * slide_height), 
                     "unit": 'PT'
                 }
             },
             "transform": {
-                "scaleX": slide_width / example_width,
-                "scaleY": slide_height / example_height,
+                "scaleX": 1,
+                "scaleY": 1,
                 "shearX": 0,
                 "shearY": 0,
-                "translateX": round(element["x"] / example_width * slide_width),
-                "translateY": round(element["y"] / example_height * slide_height),
+                "translateX": round(left * slide_width),
+                "translateY": round(top * slide_height),
                 "unit": 'PT'
             },
         }
@@ -160,8 +161,9 @@ def adapt_example_slide(slide_info, example_info):
         if type == "figure":
             url = element["design"]["url"]
             image_np = get_image_np(url)
-            image_np = create_cropped_image(image_np, x / example_width, y / example_height, width / example_width, height / example_height)
-            url = save_cropped_image(image_np)
+            image_np = create_cropped_image(image_np, left, top, width, height)
+            image_name = str(element["slide_deck_id"]) + '_' + str(element["slide_id"]) + '_' + str(element["object_id"])
+            url = save_cropped_image(image_np, image_name)
             requests.append({
                 "createImage": {
                     "objectId": object_id,
@@ -170,6 +172,10 @@ def adapt_example_slide(slide_info, example_info):
                 }
             })
         else:
+            element_properties["size"]["width"]["magnitude"] += 40
+            element_properties["size"]["height"]["magnitude"] += 40
+            element_properties["transform"]["translateX"] -= 20
+            element_properties["transform"]["translateY"] -= 20
             requests.append({
                 "createShape": {
                     "objectId": object_id,

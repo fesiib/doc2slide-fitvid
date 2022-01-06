@@ -22,7 +22,7 @@ def detect_color(image_np, mask, default_color):
         color_sum = default_color
     else:
         color_sum = np.floor_divide(color_sum, color_cnt)
-        color_sum = tuple(color_sum.tolist())
+        color_sum = tuple(color_sum.tolist())[::-1]
     ret_color = tuple(t / 255 for t in color_sum)
     return ret_color
 

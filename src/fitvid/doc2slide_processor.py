@@ -4,7 +4,6 @@ import sys
 sys.path.insert(1, os.path.abspath('./src/fitvid/'))
 print(os.path.abspath('.'))
 
-from google.protobuf.text_format import Error
 from six import print_
 import tensorflow as tf
 
@@ -22,12 +21,10 @@ import cv2
 import csv
 
 
-from parameters import PATH_TO_CFG, PATH_TO_CKPT, PATH_TO_LABELS, CLASS_LABELS
+from parameters import INTERSECTION_THRESHOLD, PATH_TO_CFG, PATH_TO_CKPT, PATH_TO_LABELS, CLASS_LABELS
 
 class LayoutDetection(object):
     def __init__(self):
-        self.min_score_thresh = 0.5
-        
         configs = config_util.get_configs_from_pipeline_file(PATH_TO_CFG)
         model_config = configs['model']
         
@@ -39,7 +36,7 @@ class LayoutDetection(object):
         self.category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS,use_display_name=True)
         return
     
-    def detect(self, image_np, slide_deck_id, slide_id):
+    def detect(self, image_np, slide_deck_id, slide_id, min_score_thresh):
         image_np = self._preprocess(image_np)
 
         input_tensor = tf.convert_to_tensor(np.expand_dims(image_np, 0), dtype=tf.float32)
@@ -52,16 +49,34 @@ class LayoutDetection(object):
         
         # Filter
         scores = detections['detection_scores']
-        detections['detection_boxes'] = detections['detection_boxes'][scores >= self.min_score_thresh]
-        detections['detection_classes'] = detections['detection_classes'][scores >= self.min_score_thresh]
-        detections['detection_scores'] = detections['detection_scores'][scores >= self.min_score_thresh]
+        detections['detection_boxes'] = detections['detection_boxes'][scores >= min_score_thresh]
+        detections['detection_classes'] = detections['detection_classes'][scores >= min_score_thresh]
+        detections['detection_scores'] = detections['detection_scores'][scores >= min_score_thresh]
         
         cur_entries = self._get_entries(detections, image_np, slide_id, slide_deck_id)
         #print(cur_entries)
-        return cur_entries
+        return self._postprocess(cur_entries)
 
     def _preprocess(self, image_np):
         return image_np
+
+    def _postprocess(self, entries):
+        larger_entries = []
+        entries = sorted(entries, key=(lambda entry: -1 * entry["width"] * entry["height"]))
+        for entry in entries:
+            do_append = True
+            for larger_entry in larger_entries:
+                intersection = LayoutDetection.calc_intersection_ratio(
+                    (larger_entry["left"], larger_entry["top"], larger_entry["width"], larger_entry["height"]),
+                    (entry["left"], entry["top"], entry["width"], entry["height"]),
+                )
+                if (intersection > INTERSECTION_THRESHOLD):
+                    do_append = False
+                    break
+            if do_append is True:
+                larger_entries.append(entry)
+        return larger_entries
+
 
     def _get_entries(self, detections, image_np, slide_id, slide_deck_id):
         entries = []
@@ -76,17 +91,35 @@ class LayoutDetection(object):
             entry = {
                 "slide_deck_id": slide_deck_id,
                 "slide_id": slide_id,
-                "image_height": height * 0.75,
-                "image_width": width * 0.75,
+                "image_height": height,
+                "image_width": width,
                 "type": CLASS_LABELS[classes_pred[i]],
-                "confidence": round(scores[i] * 100),
-                'x': int(xmin * width * 0.75),
-                'y': int(ymin * height * 0.75),
-                'width': int((xmax-xmin) * width * 0.75),
-                'height': int((ymax-ymin) * height * 0.75),
+                "conf": round(scores[i] * 100),
+                'left': int(xmin * width),
+                'top': int(ymin * height),
+                'width': int((xmax-xmin) * width),
+                'height': int((ymax-ymin) * height),
+                'object_id': i,
             }
             entries.append(entry)
         return entries
+    
+    @classmethod
+    def calc_intersection_ratio(cl, field, box):
+        inter = (
+            max(field[0], box[0]), 
+            max(field[1], box[1]),
+            min(field[0] + field[2], box[0] + box[2]),
+            min(field[1] + field[3], box[1] + box[3]),
+        )
+        # inter[0] = x1
+        # inter[1] = y1
+        # inter[2] = x2
+        # inter[3] = y2
+        if inter[0] >= inter[2] or inter[1] > inter[3]:
+            return 0
+        return (inter[2] - inter[0]) * (inter[3] - inter[1]) / (box[2] * box[3])
+
 
 @tf.function
 def detect_fn(detection_model, image):

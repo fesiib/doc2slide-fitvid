@@ -1,3 +1,4 @@
+from google.protobuf.text_format import Error
 import pytesseract
 import cv2
 import numpy as np
@@ -25,27 +26,18 @@ def preprocess_for_detection(image_np, data):
     if (np.sum(gray_masked < 123) > image_height * image_width / 2):
         image_np = 255 - image_np
         gray = 255 - gray
+        gray_masked = 255 - gray_masked
     
     gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 13, 5)
+    gray_masked = gray.copy()
+    for entry in data:
+        left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+        gray_masked = cv2.rectangle(gray_masked, (left, top), (left+width, top+height), 255, -1)
+
     save_cropped_image(gray_masked, "a_gray_masked")
     save_cropped_image(gray, "a_gray")
     save_cropped_image(image_np, "a_thresh")
-    return image_np, gray
-
-def calc_intersection_ratio(field, box):
-    inter = (
-        max(field[0], box[0]), 
-        max(field[1], box[1]),
-        min(field[0] + field[2], box[0] + box[2]),
-        min(field[1] + field[3], box[1] + box[3]),
-    )
-    # inter[0] = x1
-    # inter[1] = y1
-    # inter[2] = x2
-    # inter[3] = y2
-    if inter[0] >= inter[2] or inter[1] > inter[3]:
-        return 0
-    return (inter[2] - inter[0]) * (inter[3] - inter[1]) / (box[2] * box[3])
+    return image_np, gray, gray_masked
 
 def convert_paragraph_info(paragraph_info):
     paragraph_attributes = {
@@ -79,28 +71,31 @@ text: {
 }
 
 '''
-def get_data(api, image_np):
+def get_data(api, image_np, gray_np):
     pil_image_np = Image.fromarray(image_np)
     api.SetImage(pil_image_np)
     api.Recognize()
     ri = api.GetIterator()
     level = RIL.PARA
     data = []
-
     for r in iterate_level(ri, level):
-        paragraph = r.GetUTF8Text(level).strip()
-        conf = r.Confidence(level)
-        font_attr = r.WordFontAttributes()
-        left, top, right, bottom = r.BoundingBox(level)
-        paragraph_info = r.ParagraphInfo()
-        width = max(right - left, 0)
-        height = max(bottom - top, 0)
-        if font_attr is not None:
-            font_attr["font_name"] = font_attr["font_name"].replace('_', ' ')
+        try:
+            paragraph = r.GetUTF8Text(level).strip()
+            conf = r.Confidence(level)
+            font_attr = r.WordFontAttributes()
+            left, top, right, bottom = r.BoundingBox(level)
+            paragraph_info = r.ParagraphInfo()
+            width = max(right - left, 0)
+            height = max(bottom - top, 0)
 
-        if paragraph_info is not None:
-            paragraph_info = convert_paragraph_info(paragraph_info)
-        if paragraph:
+            paragraph = paragraph.strip()
+            if font_attr is not None:
+                font_attr["font_name"] = font_attr["font_name"].replace('_', ' ')
+                font_attr["font_family"] = font_attr["font_name"].split(' ')[0]
+                font_attr["font_color"] = detect_font_color(image_np, gray_np)
+                #font_attr["pointsize"] -= 1
+            if paragraph_info is not None:
+                paragraph_info = convert_paragraph_info(paragraph_info)
             data.append({
                 "text": paragraph,
                 "conf": conf,
@@ -111,6 +106,8 @@ def get_data(api, image_np):
                 "width": width,
                 "height": height
             })
+        except:
+            continue
     return data
 
 def process_text(data):
@@ -137,11 +134,12 @@ def process_example(url, example_deck_id, example_id):
     image_np = get_image_np(url)
     image_np = cv2.resize(image_np, (SLIDE_WIDTH, SLIDE_HEIGHT), interpolation=cv2.INTER_LINEAR)
 
+    bbs = layout_detector.detect(image_np, example_deck_id, example_id, 0.3)
     with PyTessBaseAPI(path='./tessdata', oem=OEM.TESSERACT_ONLY) as api:
-        data = get_data(api, image_np)
-        proc_image_np, gray_np = preprocess_for_detection(image_np.copy(), data)
-        bbs = layout_detector.detect(proc_image_np, example_deck_id, example_id)
-        backgorund_color = detect_background_color(image_np, gray_np)
+        proc_image_np, gray_np, gray_masked_np = preprocess_for_detection(image_np.copy(), bbs)
+        bbs = layout_detector.detect(proc_image_np, example_deck_id, example_id, 0.5)
+        backgorund_color = detect_background_color(image_np, gray_masked_np)
+        print(backgorund_color)
         info = {
             "page": {
                 "background_color": backgorund_color,
@@ -149,39 +147,43 @@ def process_example(url, example_deck_id, example_id):
             },
             "elements": [],
         }
+
+        #data = get_data(api, proc_image_np)
+
         for bb in bbs:
             element = dict(bb)
             example_width = element["image_width"]
             example_height = element["image_height"]
             w = element["width"] / example_width
             h = element["height"] / example_height
-            x = element["x"] / example_width
-            y = element["y"] / example_height
+            l = element["left"] / example_width
+            t = element["top"] / example_height
 
             # 'title',
             # 'header',
             # 'text',
             # 'footer',
             # 'figure',
-            cropped_image_np = create_cropped_image(image_np, x, y, w, h)
-            cropped_gray_np = create_cropped_image(gray_np, x, y, w, h)
-            #data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
+            cropped_image_np = create_cropped_image(image_np, l, t, w, h)
+            cropped_gray_np = create_cropped_image(gray_np, l, t, w, h)
+            # data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
+            # cur_data = []
             
-            cur_data = []
-            
-            for entry in data:
-                left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
-                text = entry["text"]
-                if (text == ''):
-                    continue
-                left /= SLIDE_WIDTH
-                width /= SLIDE_WIDTH
-                top /= SLIDE_HEIGHT
-                height /= SLIDE_HEIGHT
-                if calc_intersection_ratio((x, y, w, h), (left, top, width, height)) < INTERSECTION_THRESHOLD:
-                    continue
-                entry["font_attr"]["font_color"] = detect_font_color(cropped_image_np, cropped_gray_np)
-                cur_data.append(entry)
+            # for entry in data:
+            #     left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+            #     text = entry["text"]
+            #     if (text == ''):
+            #         continue
+            #     left /= SLIDE_WIDTH
+            #     width /= SLIDE_WIDTH
+            #     top /= SLIDE_HEIGHT
+            #     height /= SLIDE_HEIGHT
+            #     if LayoutDetection.calc_intersection_ratio((l, t, w, h), (left, top, width, height)) < INTERSECTION_THRESHOLD:
+            #         continue
+            #     entry["font_attr"]["font_color"] = detect_font_color(cropped_image_np, cropped_gray_np)
+            #     cur_data.append(entry)
+
+            cur_data = get_data(api, cropped_image_np, cropped_gray_np)
 
             if len(cur_data) == 0:
                 element["type"] = 'figure'
