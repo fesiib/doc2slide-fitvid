@@ -174,8 +174,8 @@ def adapt_example_slide(slide_info, example_info):
         else:
             element_properties["size"]["width"]["magnitude"] += 60
             element_properties["size"]["height"]["magnitude"] += 30
-            element_properties["transform"]["translateX"] -= 20
-            element_properties["transform"]["translateY"] -= 20
+            element_properties["transform"]["translateX"] = max(element_properties["transform"]["translateX"] - 20, 0)
+            element_properties["transform"]["translateY"] = max(element_properties["transform"]["translateY"] - 20, 0)
             requests.append({
                 "createShape": {
                     "objectId": object_id,
