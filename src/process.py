@@ -22,7 +22,13 @@ def preprocess_for_detection(image_np, data):
     gray_masked = gray.copy()
     figures_area = 0
     for entry in data:
-        left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+        left, top, width, height = (
+            int(entry["left"] / entry["image_width"] * image_width),
+            int(entry["top"] / entry["image_height"] * image_height),
+            int(entry["width"] / entry["image_width"] * image_width),
+            int(entry["height"] / entry["image_height"] * image_height)
+        )
+        print(left, top, width, height)
         gray_masked = cv2.rectangle(gray_masked, (left, top), (left+width, top+height), 255, -1)
         if entry["type"] == 'figure':
             figures_area += width * height
@@ -34,7 +40,12 @@ def preprocess_for_detection(image_np, data):
     gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 13, 5)
     gray_masked = gray.copy()
     for entry in data:
-        left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+        left, top, width, height = (
+            int(entry["left"] / entry["image_width"] * image_width),
+            int(entry["top"] / entry["image_height"] * image_height),
+            int(entry["width"] / entry["image_width"] * image_width),
+            int(entry["height"] / entry["image_height"] * image_height)
+        )
         gray_masked = cv2.rectangle(gray_masked, (left, top), (left+width, top+height), 255, -1)
 
     save_cropped_image(gray_masked, "a_gray_masked")
@@ -142,7 +153,69 @@ def process_example(url, example_deck_id, example_id):
         proc_image_np, gray_np, gray_masked_np = preprocess_for_detection(image_np.copy(), bbs)
         bbs = layout_detector.detect(proc_image_np, example_deck_id, example_id, 0.5)
         backgorund_color = detect_background_color(image_np, gray_masked_np)
-        print(backgorund_color)
+        info = {
+            "page": {
+                "background_color": backgorund_color,
+                "has_slide_number": False,
+            },
+            "elements": [],
+        }
+
+        #data = get_data(api, proc_image_np)
+
+        for bb in bbs:
+            element = dict(bb)
+            example_width = element["image_width"]
+            example_height = element["image_height"]
+            w = element["width"] / example_width
+            h = element["height"] / example_height
+            l = element["left"] / example_width
+            t = element["top"] / example_height
+
+            # 'title',
+            # 'header',
+            # 'text',
+            # 'footer',
+            # 'figure',
+            cropped_image_np = create_cropped_image(image_np, l, t, w, h)
+            cropped_gray_np = create_cropped_image(gray_np, l, t, w, h)
+            # data = pytesseract.image_to_data(cropped_image_np, output_type=pytesseract.Output.DICT)
+            # cur_data = []
+            
+            # for entry in data:
+            #     left, top, width, height = entry["left"], entry["top"], entry["width"], entry["height"]
+            #     text = entry["text"]
+            #     if (text == ''):
+            #         continue
+            #     left /= SLIDE_WIDTH
+            #     width /= SLIDE_WIDTH
+            #     top /= SLIDE_HEIGHT
+            #     height /= SLIDE_HEIGHT
+            #     if LayoutDetection.calc_intersection_ratio((l, t, w, h), (left, top, width, height)) < INTERSECTION_THRESHOLD:
+            #         continue
+            #     entry["font_attr"]["font_color"] = detect_font_color(cropped_image_np, cropped_gray_np)
+            #     cur_data.append(entry)
+
+            cur_data = get_data(api, cropped_image_np, cropped_gray_np)
+
+            if len(cur_data) == 0:
+                element["type"] = 'figure'
+
+            if element["type"] == 'figure':
+                element["design"] = {
+                    'url': url,
+                }
+            else:
+                element["design"] = process_text(cur_data)
+            info["elements"].append(element)
+    return info
+
+def process_example_design(url, bbs):
+    image_np = get_image_np(url)
+    image_np = cv2.resize(image_np, (SLIDE_WIDTH, SLIDE_HEIGHT), interpolation=cv2.INTER_LINEAR)
+    with PyTessBaseAPI(path='./tessdata', oem=OEM.TESSERACT_ONLY) as api:
+        proc_image_np, gray_np, gray_masked_np = preprocess_for_detection(image_np.copy(), bbs)
+        backgorund_color = detect_background_color(image_np, gray_masked_np)
         info = {
             "page": {
                 "background_color": backgorund_color,

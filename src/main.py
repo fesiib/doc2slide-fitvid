@@ -8,7 +8,7 @@ import numpy as np
 
 from parameters import CROPPED_IMAGES_PATH
 from adaptation import adapt_example_slide
-from process import process_example
+from process import process_example, process_example_design
 
 app = Flask(__name__)
 CORS(app, origins = ["http://localhost:3000"])
@@ -67,18 +67,15 @@ def process_example_design_route():
     requestJSON = json.loads(decoded)
 
     url = requestJSON['url']
-    slide_id = requestJSON['slide_id']
-    slide_deck_id = requestJSON['slide_deck_id']
+    bbs = requestJSON['bbs']
 
-    example_info = process_example(url, slide_deck_id, slide_id)
+    example_info = process_example_design(url, bbs)
 
     responseJSON = {
         "example_info": example_info,
         "status": "success",
     }
     return json.dumps(responseJSON)
-
-
 
 def main():
 
